@@ -78,8 +78,14 @@ if [ -d "$HOME/.pi" ]; then
     _fish="${XDG_CONFIG_HOME:-$HOME/.config}/fish/functions/pi.fish"
     mkdir -p "$(dirname "$_fish")"
     cat > "$_fish" <<EOF
-# Managed by agent-harness. Appends the shared house style to every pi run.
+# Managed by agent-harness. Appends the shared house style to interactive pi runs.
 function pi --wraps pi
+    # Management subcommands must pass through untouched — the flag breaks their parser.
+    switch "\$argv[1]"
+        case install remove uninstall update list config --help -h --version -v --list-models --export
+            command pi \$argv
+            return
+    end
     set -l style "$XDG/house-style.md"
     if test -f \$style
         command pi --append-system-prompt \$style \$argv
@@ -94,6 +100,10 @@ EOF
   cat > "$_posix" <<EOF
 # Managed by agent-harness. For bash/zsh: add  . "$_posix"  to your rc file.
 pi() {
+  case "\${1:-}" in
+    install|remove|uninstall|update|list|config|--help|-h|--version|-v|--list-models|--export)
+      command pi "\$@"; return;;
+  esac
   if [ -f "$XDG/house-style.md" ]; then
     command pi --append-system-prompt "$XDG/house-style.md" "\$@"
   else
