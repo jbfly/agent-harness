@@ -1,11 +1,14 @@
 /**
- * token-meter — a live, ticking input/output token counter in pi's footer.
+ * token-meter — a live input/output token counter in pi's footer.
  *
- * Sums the real `usage` on each finished assistant message, and for the message
- * that's still streaming it estimates output tokens from the text length so the
- * counter ticks up as the model writes — then snaps to the real number when the
- * turn finishes. Shows ↑input ↓output (+ ⚡cache, $cost). It's a keyed status
- * segment, so it coexists with the other footer bits.
+ * Sums the real `usage` on each finished assistant message; for a message that's
+ * still streaming it estimates output from text length so the number climbs, then
+ * snaps to the real value when the turn ends. Shows ↑input ↓output (+ ⚡cache $cost).
+ *
+ * IMPORTANT: a captured ctx goes STALE after a session resume/reload, and touching
+ * it then throws. Because update() runs on a timer, every ctx access is guarded so
+ * a stale ctx is dropped (and re-acquired from the next session event) instead of
+ * crashing pi.
  */
 
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
@@ -17,7 +20,7 @@ interface Totals {
   cost: number;
 }
 
-const TICK_MS = 200; // fast enough to feel like a meter ticking
+const TICK_MS = 200;
 
 function fmt(n: number): string {
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(n >= 10_000_000 ? 0 : 2) + "M";
@@ -55,8 +58,7 @@ function totalsForBranch(ctx: ExtensionContext): Totals {
       t.cacheRead += u.cacheRead ?? 0;
       t.cost += u.cost?.total ?? 0;
     } else {
-      // Still streaming (no final usage yet): estimate output from text length (~4 chars/token).
-      t.output += Math.ceil(textOf(e.message).length / 4);
+      t.output += Math.ceil(textOf(e.message).length / 4); // streaming estimate
     }
   }
   return t;
@@ -69,27 +71,36 @@ export default function tokenMeter(pi: ExtensionAPI): void {
 
   function update(): void {
     const ctx = ctxRef;
-    if (!ctx?.hasUI) return;
-    const t = totalsForBranch(ctx);
-    const theme = ctx.ui.theme;
-    let text = theme.fg("accent", `↑${fmt(t.input)}`) + " " + theme.fg("muted", `↓${fmt(t.output)}`);
-    if (t.cacheRead) text += " " + theme.fg("dim", `⚡${fmt(t.cacheRead)}`);
-    if (t.cost) text += " " + theme.fg("dim", `$${t.cost.toFixed(2)}`);
-    if (text === lastText) return;
-    lastText = text;
-    ctx.ui.setStatus("token-meter", text);
+    if (!ctx) return;
+    // The hasUI getter throws if the ctx is stale (session was replaced/reloaded).
+    try {
+      if (!ctx.hasUI) return;
+    } catch {
+      ctxRef = undefined; // drop the stale ctx; a session event will re-attach a fresh one
+      return;
+    }
+    try {
+      const t = totalsForBranch(ctx);
+      const theme = ctx.ui.theme;
+      let text = theme.fg("accent", `↑${fmt(t.input)}`) + " " + theme.fg("muted", `↓${fmt(t.output)}`);
+      if (t.cacheRead) text += " " + theme.fg("dim", `⚡${fmt(t.cacheRead)}`);
+      if (t.cost) text += " " + theme.fg("dim", `$${t.cost.toFixed(2)}`);
+      if (text === lastText) return;
+      lastText = text;
+      ctx.ui.setStatus("token-meter", text);
+    } catch {
+      /* transient mid-replacement state; ignore */
+    }
   }
 
   function attach(ctx: ExtensionContext): void {
     ctxRef = ctx;
+    lastText = undefined;
     update();
     if (!timer) timer = setInterval(update, TICK_MS);
   }
 
   pi.on("session_start", async (_e, ctx) => attach(ctx));
   pi.on("session_tree", async (_e, ctx) => attach(ctx));
-  pi.on("before_agent_start", async (_e, ctx) => {
-    ctxRef = ctx;
-    update();
-  });
+  pi.on("before_agent_start", async (_e, ctx) => attach(ctx));
 }

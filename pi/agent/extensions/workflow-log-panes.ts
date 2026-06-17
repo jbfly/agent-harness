@@ -59,14 +59,21 @@ async function openDashboard(ctx: ExtensionContext): Promise<void> {
     return;
   }
 
+  const n = logs.length;
   let anchor = pane; // first split goes right of pi; later splits stack below the previous right pane
-  for (let i = 0; i < logs.length; i++) {
+  for (let i = 0; i < n; i++) {
     const path = join(dir, logs[i]);
     const cmd = `printf '── %s ──\\n' ${shq(logs[i])}; tail -n 200 -F ${shq(path)}`;
-    const args =
-      i === 0
-        ? ["split-window", "-h", "-p", "25", "-d", "-P", "-F", "#{pane_id}", "-t", pane, cmd]
-        : ["split-window", "-v", "-d", "-P", "-F", "#{pane_id}", "-t", anchor, cmd];
+    let args: string[];
+    if (i === 0) {
+      // right-hand column, 25% of the window width
+      args = ["split-window", "-h", "-p", "25", "-d", "-P", "-F", "#{pane_id}", "-t", pane, cmd];
+    } else {
+      // split the previous right pane so all stripes end up equal height: the new
+      // pane takes (n-i)/(n-i+1) of the target, leaving the target at 1/n.
+      const pct = Math.round((100 * (n - i)) / (n - i + 1));
+      args = ["split-window", "-v", "-p", String(pct), "-d", "-P", "-F", "#{pane_id}", "-t", anchor, cmd];
+    }
     try {
       anchor = await tmux(args);
     } catch (e) {
