@@ -103,4 +103,5 @@ export default function tokenMeter(pi: ExtensionAPI): void {
   pi.on("session_start", async (_e, ctx) => attach(ctx));
   pi.on("session_tree", async (_e, ctx) => attach(ctx));
   pi.on("before_agent_start", async (_e, ctx) => attach(ctx));
+  pi.on("message_update", async (_e, ctx) => attach(ctx)); // re-render during streaming
 }
