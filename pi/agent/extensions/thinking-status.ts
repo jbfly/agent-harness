@@ -78,7 +78,8 @@ export default function thinkingStatus(pi: ExtensionAPI): void {
       const s = `${theme.fg("accent", `${word}…`)} ${theme.fg("dim", `(${inner})`)}`;
       if (s === lastStatus) return;
       lastStatus = s;
-      ctx.ui.setStatus("thinking", s);
+      // This is the built-in spinner/working row (where "Waiting" shows), not the footer.
+      ctx.ui.setWorkingMessage(s);
     } catch {
       /* transient */
     }
@@ -92,7 +93,7 @@ export default function thinkingStatus(pi: ExtensionAPI): void {
     const ctx = ctxRef;
     if (!uiOk(ctx)) return;
     try {
-      ctx.ui.setStatus("thinking", undefined);
+      ctx.ui.setWorkingMessage(); // restore pi's default "Working" message
     } catch {
       /* ignore */
     }
