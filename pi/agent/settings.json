@@ -1,0 +1,27 @@
+{
+  "lastChangelogVersion": "0.79.6",
+  "defaultProvider": "anthropic",
+  "defaultModel": "claude-opus-4-8",
+  "defaultThinkingLevel": "xhigh",
+  "enabledModels": [
+    "openai-codex/gpt-5.5",
+    "openai-codex/gpt-5.4",
+    "openai-codex/gpt-5.4-mini",
+    "openai-codex/gpt-5.3-codex-spark",
+    "opencode-go/deepseek-v4-pro",
+    "opencode-go/deepseek-v4-flash",
+    "opencode-go/qwen3.6-plus",
+    "opencode/qwen3.6-plus",
+    "opencode/kimi-k2.6",
+    "opencode/glm-5.1"
+  ],
+  "packages": [
+    "npm:pi-mcp-adapter",
+    "npm:pi-chatgpt-limit",
+    "git:github.com/jbfly/pi-workflow-engine"
+  ],
+  "compaction": {
+    "enabled": true
+  },
+  "theme": "dark"
+}

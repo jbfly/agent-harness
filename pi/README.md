@@ -1,0 +1,28 @@
+# pi harness backup
+
+A version-controlled copy of the hand-authored pi config under `~/.pi/agent/`,
+written by `../pi-backup.sh`. Curated allowlist only — **no secrets**, sessions,
+caches, `node_modules`, or git-cloned packages.
+
+## What's here (`pi/agent/`)
+- `extensions/` — custom pi extensions (token-meter, tmux-namer, workflow-log-panes,
+  answer, seth-mode, goal-mode, tmux-dashboard, …).
+- `workflows/` — custom workflow scripts + `_models.ts` tier map.
+- `agents/` — subagent role definitions (`.md`).
+- `prompts/`, `_retired/` — slash-prompt templates and retired components.
+- `settings.json`, `models.json` — pi settings + local model/provider config.
+
+## Back up
+```sh
+sh ~/git/agent-harness/pi-backup.sh
+```
+
+## Restore (to a fresh machine)
+1. Install pi, then the packages: `pi install npm:pi-mcp-adapter npm:pi-chatgpt-limit`
+   and the workflow engine fork: `pi install git:github.com/jbfly/pi-workflow-engine`.
+2. Copy these files back:
+   ```sh
+   cp -a ~/git/agent-harness/pi/agent/. ~/.pi/agent/
+   ```
+3. Re-auth pi (`auth.json` is intentionally not backed up) and install skills via
+   `~/git/es-ai-ops/scripts/install-agent-skills.sh`.
