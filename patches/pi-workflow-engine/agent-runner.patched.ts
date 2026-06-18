@@ -4,6 +4,7 @@ import type { Api, Model } from "@earendil-works/pi-ai";
 import type { AgentOptions } from "./types.ts";
 import type { Semaphore } from "./concurrency.ts";
 import type { PerfSink } from "./perf.ts";
+import type { WorkflowUsageSink } from "./usage.ts";
 import { throwIfAborted } from "./cancellation.ts";
 import { createAgentLogger, modelDisplay } from "./agent-log.ts";
 
@@ -43,7 +44,67 @@ export interface RunContext {
   progress: AgentProgress;
   signal: AbortSignal | undefined;
   perf: PerfSink;
+  usage: WorkflowUsageSink;
   createSession?: CreateAgentSession;
+}
+
+export interface ResolvedAgentModelRequest {
+  readonly ref: string;
+  readonly provider: string;
+  readonly id: string;
+}
+
+export interface ResolvedAgentModel {
+  readonly model: Model<Api> | undefined;
+  readonly requested: ResolvedAgentModelRequest | undefined;
+}
+
+function parseAgentModelRef(modelRef: string): ResolvedAgentModelRequest {
+  const normalized = modelRef.trim();
+  if (normalized.length === 0) {
+    throw new Error('Invalid agent model ref: expected a bare model id or "provider/id".');
+  }
+  if (normalized !== modelRef) {
+    throw new Error(`Invalid agent model ref "${modelRef}": remove leading or trailing whitespace.`);
+  }
+
+  const slash = modelRef.indexOf("/");
+  if (slash === -1) {
+    return { ref: modelRef, provider: "anthropic", id: modelRef };
+  }
+
+  const provider = modelRef.slice(0, slash);
+  const id = modelRef.slice(slash + 1);
+  if (provider.length === 0 || id.length === 0 || id.startsWith("/")) {
+    throw new Error(`Invalid agent model ref "${modelRef}": expected "provider/id".`);
+  }
+  return { ref: modelRef, provider, id };
+}
+
+/**
+ * Resolve a workflow agent model reference.
+ *
+ * Omitted refs inherit the host/session default model. Explicit refs are strict:
+ * bare model ids keep the original Anthropic shorthand for compatibility, and
+ * provider-qualified refs split only on the first slash so provider routers such
+ * as OpenRouter can use ids that contain additional slashes.
+ */
+export function resolveAgentModel(
+  modelRef: string | undefined,
+  modelRegistry: Pick<ModelRegistry, "find">,
+  hostModel: Model<Api> | undefined,
+): ResolvedAgentModel {
+  if (modelRef === undefined) {
+    return { model: hostModel, requested: undefined };
+  }
+
+  const parsed = parseAgentModelRef(modelRef);
+  const found = modelRegistry.find(parsed.provider, parsed.id);
+  if (!found) {
+    throw new Error(`Agent model "${modelRef}" not found (resolved as ${parsed.provider}/${parsed.id}).`);
+  }
+
+  return { model: found, requested: parsed };
 }
 
 /** Pull the last assistant message's plain text out of a finished session. */
@@ -125,8 +186,14 @@ export async function runAgent(rc: RunContext, prompt: string, opts: AgentOption
         let captured: unknown = null;
         let failed = false;
         let session: AgentRunnerSession | undefined;
+        let usageRecorded = false;
         let unsubscribe: (() => void) | undefined;
-        let logger: ReturnType<typeof createAgentLogger> | undefined;
+        let logger: ReturnType<typeof createAgentLogger> | undefined; // [agent-harness] on-disk activity log (/wlogs)
+        const recordUsage = (activeSession: AgentRunnerSession): void => {
+          if (usageRecorded) return;
+          usageRecorded = true;
+          rc.usage.recordAgentSession({ label, phase, messages: activeSession.state.messages });
+        };
         const customTools: ToolDefinition[] = opts.schema
           ? [
               defineTool({
@@ -151,26 +218,14 @@ export async function runAgent(rc: RunContext, prompt: string, opts: AgentOption
               : opts.tools
             : undefined;
 
-          // Resolve the model: accept "provider/id" for any provider (e.g.
-          // "openai-codex/gpt-5.4-mini"), or a bare id (treated as anthropic for
-          // back-compat). Falls back to the host model when not found. [agent-harness patch]
-          let model = rc.hostModel;
-          if (opts.model) {
-            const slash = opts.model.indexOf("/");
-            const found =
-              slash > 0
-                ? rc.modelRegistry.find(opts.model.slice(0, slash), opts.model.slice(slash + 1))
-                : rc.modelRegistry.find("anthropic", opts.model);
-            model = found ?? rc.hostModel;
-          }
-          const createSessionForRun = rc.createSession ?? defaultCreateSession;
-
-          logger = createAgentLogger(rc, label, rowId);
+          const { model } = resolveAgentModel(opts.model, rc.modelRegistry, rc.hostModel);
+          logger = createAgentLogger(rc, label, rowId); // [agent-harness] per-subagent activity log
           try {
             logger?.header(modelDisplay(model, opts.model), prompt);
           } catch {
             /* logging is best-effort */
           }
+          const createSessionForRun = rc.createSession ?? defaultCreateSession;
 
           throwIfAborted(rc.signal);
           const created = await rc.perf.time(
@@ -195,11 +250,6 @@ export async function runAgent(rc: RunContext, prompt: string, opts: AgentOption
             if (event.type === "tool_execution_start" && event.toolName !== undefined && event.toolName !== FINAL_TOOL) {
               rc.progress.agentTool(label, event.toolName, rowId);
             }
-            try {
-              logger?.append(activeSession.state.messages);
-            } catch {
-              /* best-effort */
-            }
           });
 
           const finalPrompt = opts.schema
@@ -212,6 +262,7 @@ export async function runAgent(rc: RunContext, prompt: string, opts: AgentOption
           } finally {
             unlinkPromptAbort();
           }
+          recordUsage(activeSession);
           throwIfAborted(rc.signal);
 
           const result = rc.perf.timeSync(
@@ -229,26 +280,27 @@ export async function runAgent(rc: RunContext, prompt: string, opts: AgentOption
             tags,
           );
           try {
-            logger?.append(activeSession.state.messages);
+            logger?.append(activeSession.state.messages); // [agent-harness]
             logger?.finalize("done", typeof result === "string" ? result : JSON.stringify(result, null, 2));
           } catch {
             /* best-effort */
           }
           return result;
         } catch (error) {
-          try {
-            logger?.finalize("failed", error instanceof Error ? error.stack ?? error.message : String(error));
-          } catch {
-            /* best-effort */
-          }
           failed = true;
           failureHandled = true;
           rc.progress.agentFailed(label, error, rowId);
           rc.progress.log(`${label} failed: ${error instanceof Error ? error.message : String(error)}`);
+          try {
+            logger?.finalize("failed", error instanceof Error ? (error.stack ?? error.message) : String(error)); // [agent-harness]
+          } catch {
+            /* best-effort */
+          }
           throw error;
         } finally {
           const disposable = session;
           if (disposable) {
+            recordUsage(disposable);
             rc.perf.timeSync(
               "agent.dispose_ms",
               () => {
