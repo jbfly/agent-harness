@@ -7,6 +7,11 @@
  * you asked; an elapsed timer ticks; and the streaming output token count rides the
  * `message_update` event (token-by-token). Clears when the agent loop ends.
  *
+ * The gerund shimmers: a soft glow band sweeps left→right through its letters on a
+ * fixed-time cycle (à la Claude Code), each character interpolated in 24-bit color
+ * between a warm base and a brighter, faintly-cool highlight. The sweep is driven by
+ * wall-clock elapsed (not the tick count) so it stays smooth even if a frame is late.
+ *
  * Every ctx access is guarded: a captured ctx goes STALE after a session
  * resume/reload and throws on use, so we drop it rather than crash (a setInterval
  * doing this once took pi down — never again).
@@ -26,7 +31,42 @@ const GERUND_PROMPT =
   "Terminating, Killing, Deleting, Destroying, Stopping, Exiting, or similar. NEVER use a word " +
   "that may be derogatory, offensive, or inappropriate in a non-coding context, such as Penetrating.";
 
-const TICK_MS = 250;
+const TICK_MS = 80; // ~12.5fps — fast enough that the shimmer reads as fluid motion
+
+// Shimmer: a glow band sweeps through the word. Warm base, brighter faintly-cool
+// highlight — the warm↔cool contrast is the "complementary color" that appears to move.
+const BASE_RGB: [number, number, number] = [186, 148, 112]; // warm tan
+const GLOW_RGB: [number, number, number] = [232, 240, 255]; // bright, faintly cool
+const BAND = 3.0; // glow half-width, in characters
+const SWEEP_MS = 1500; // time for the glow centre to cross the whole word once
+const GAP = BAND; // one band-width margin each side: the tail of one sweep hands off to
+// the head of the next with no fully-dark frame — continuous motion, no stall.
+
+function smoothstep(t: number): number {
+  if (t <= 0) return 0;
+  if (t >= 1) return 1;
+  return t * t * (3 - 2 * t);
+}
+
+function lerp(a: number, b: number, t: number): number {
+  return Math.round(a + (b - a) * t);
+}
+
+// Per-character 24-bit colour, with a glow centred at `center` (in character units).
+function shimmerWord(word: string, elapsedMs: number): string {
+  const len = word.length;
+  const track = len + GAP * 2;
+  const center = ((elapsedMs % SWEEP_MS) / SWEEP_MS) * track - GAP; // sweeps left→right, wraps
+  let out = "";
+  for (let i = 0; i < len; i++) {
+    const intensity = smoothstep(1 - Math.abs(i - center) / BAND);
+    const r = lerp(BASE_RGB[0], GLOW_RGB[0], intensity);
+    const g = lerp(BASE_RGB[1], GLOW_RGB[1], intensity);
+    const b = lerp(BASE_RGB[2], GLOW_RGB[2], intensity);
+    out += `\x1b[38;2;${r};${g};${b}m${word[i]}`;
+  }
+  return out + "\x1b[39m"; // reset fg; the suffix sets its own colour
+}
 
 function fmtTok(n: number): string {
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(2) + "M";
@@ -74,8 +114,9 @@ export default function thinkingStatus(pi: ExtensionAPI): void {
     try {
       const theme = ctx.ui.theme;
       const word = gerund ?? "Thinking";
-      const inner = outTokens > 0 ? `${fmtElapsed(Date.now() - startedAt)} · ↓${fmtTok(outTokens)}` : fmtElapsed(Date.now() - startedAt);
-      const s = `${theme.fg("accent", `${word}…`)} ${theme.fg("dim", `(${inner})`)}`;
+      const elapsed = Date.now() - startedAt;
+      const inner = outTokens > 0 ? `${fmtElapsed(elapsed)} · ↓${fmtTok(outTokens)}` : fmtElapsed(elapsed);
+      const s = `${shimmerWord(word, elapsed)}${theme.fg("dim", "…")} ${theme.fg("dim", `(${inner})`)}`;
       if (s === lastStatus) return;
       lastStatus = s;
       // This is the built-in spinner/working row (where "Waiting" shows), not the footer.
