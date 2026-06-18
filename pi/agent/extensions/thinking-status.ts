@@ -31,7 +31,8 @@ const GERUND_PROMPT =
   "Terminating, Killing, Deleting, Destroying, Stopping, Exiting, or similar. NEVER use a word " +
   "that may be derogatory, offensive, or inappropriate in a non-coding context, such as Penetrating.";
 
-const TICK_MS = 80; // ~12.5fps — fast enough that the shimmer reads as fluid motion
+const TICK_MS = 120; // ~8fps — fluid enough for the time-based sweep without the 80ms
+// full-row rewrite fighting pi's built-in spinner repaint (that combo flickers).
 
 // Shimmer: a glow band sweeps through the word. Warm base, brighter faintly-cool
 // highlight — the warm↔cool contrast is the "complementary color" that appears to move.
@@ -79,6 +80,26 @@ function fmtElapsed(ms: number): string {
   return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${s % 60}s`;
 }
 
+// The prompt size sent into the current turn ≈ the last completed assistant message's
+// input + cacheRead (with prompt caching, the bulk lives in cacheRead). This is the
+// big, meaningful "input" number — it grows as the context fills. Computed once per
+// turn (cheap), not per frame.
+function contextTokens(ctx: ExtensionContext): number {
+  let branch: unknown[];
+  try {
+    branch = ctx.sessionManager.getBranch();
+  } catch {
+    return 0;
+  }
+  for (let i = branch.length - 1; i >= 0; i--) {
+    const e = branch[i] as { type?: string; message?: { role?: string; usage?: { input?: number; cacheRead?: number } } };
+    if (e?.type === "message" && e.message?.role === "assistant" && e.message.usage) {
+      return (e.message.usage.input ?? 0) + (e.message.usage.cacheRead ?? 0);
+    }
+  }
+  return 0;
+}
+
 function streamingTokens(msg: unknown): number {
   const m = msg as { content?: Array<{ type?: string; text?: string }>; usage?: { output?: number } } | undefined;
   if (m?.usage?.output) return m.usage.output;
@@ -95,6 +116,7 @@ export default function thinkingStatus(pi: ExtensionAPI): void {
   let startedAt = 0;
   let gerund: string | undefined;
   let outTokens = 0;
+  let inTokens = 0;
   let active = false;
   let lastStatus: string | undefined;
 
@@ -115,7 +137,8 @@ export default function thinkingStatus(pi: ExtensionAPI): void {
       const theme = ctx.ui.theme;
       const word = gerund ?? "Thinking";
       const elapsed = Date.now() - startedAt;
-      const inner = outTokens > 0 ? `${fmtElapsed(elapsed)} · ↓${fmtTok(outTokens)}` : fmtElapsed(elapsed);
+      const counts = [inTokens > 0 ? `↑${fmtTok(inTokens)}` : "", outTokens > 0 ? `↓${fmtTok(outTokens)}` : ""].filter(Boolean).join(" ");
+      const inner = counts ? `${fmtElapsed(elapsed)} · ${counts}` : fmtElapsed(elapsed);
       const s = `${shimmerWord(word, elapsed)}${theme.fg("dim", "…")} ${theme.fg("dim", `(${inner})`)}`;
       if (s === lastStatus) return;
       lastStatus = s;
@@ -129,6 +152,7 @@ export default function thinkingStatus(pi: ExtensionAPI): void {
   function clear(): void {
     active = false;
     outTokens = 0;
+    inTokens = 0;
     gerund = undefined;
     lastStatus = undefined;
     const ctx = ctxRef;
@@ -174,6 +198,7 @@ export default function thinkingStatus(pi: ExtensionAPI): void {
       active = true;
       startedAt = Date.now();
       outTokens = 0;
+      inTokens = contextTokens(ctx); // prompt size going into this turn (grows as context fills)
       gerund = undefined;
       const prompt = event && typeof (event as { prompt?: unknown }).prompt === "string" ? (event as { prompt: string }).prompt : "";
       if (prompt) void makeGerund(ctx, prompt);
