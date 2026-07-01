@@ -16,6 +16,7 @@ profiles/
   house-style.md   # the global voice + working rules. The important one.
   seth-mode.md     # an opt-in terse register for code/systems writing (off by default)
 install.sh         # idempotent, cross-platform installer
+install-ponytail.sh # idempotent installer for the upstream Ponytail skill/plugin
 AGENTS.md          # this repo's own short pointer
 ```
 
@@ -24,6 +25,7 @@ AGENTS.md          # this repo's own short pointer
 ```sh
 git clone <this repo> ~/git/agent-harness   # or wherever
 sh ~/git/agent-harness/install.sh
+sh ~/git/agent-harness/install-ponytail.sh   # optional: lazy senior dev skill/plugin
 exec fish   # (or open a new shell) so the pi wrapper loads
 ```
 
@@ -58,6 +60,18 @@ the ES rules come from layers 1 and 2.
 
 Add one case to `install.sh` pointing the new tool's instruction file at
 `~/.config/agents/house-style.md`. Nothing else changes.
+
+## Ponytail
+
+`install-ponytail.sh` installs the upstream [DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail) adapters:
+
+| Harness | Install path |
+|---|---|
+| pi | `pi install git:github.com/DietrichGebert/ponytail` |
+| codex | `codex plugin marketplace add …` + `codex plugin add ponytail@ponytail` |
+| Claude Code | `claude plugin marketplace add …` + `claude plugin install ponytail@ponytail` |
+
+Ponytail defaults to `full` mode. Start a new session after installing; use `/ponytail off` or say `normal mode` to disable it for a session.
 
 ## seth-mode
 

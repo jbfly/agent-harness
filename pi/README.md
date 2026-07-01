@@ -18,8 +18,14 @@ sh ~/git/agent-harness/pi-backup.sh
 ```
 
 ## Restore (to a fresh machine)
-1. Install pi, then the packages: `pi install npm:pi-mcp-adapter npm:pi-chatgpt-limit npm:pi-btw`
-   and the workflow engine fork: `pi install git:github.com/jbfly/pi-workflow-engine`.
+1. Install pi, then install the packages:
+   ```sh
+   pi install npm:pi-mcp-adapter
+   pi install npm:pi-chatgpt-limit
+   pi install git:github.com/jbfly/pi-workflow-engine
+   pi install npm:pi-btw
+   pi install git:github.com/DietrichGebert/ponytail
+   ```
 2. Copy these files back:
    ```sh
    cp -a ~/git/agent-harness/pi/agent/. ~/.pi/agent/

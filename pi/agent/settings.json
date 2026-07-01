@@ -19,7 +19,8 @@
     "npm:pi-mcp-adapter",
     "npm:pi-chatgpt-limit",
     "git:github.com/jbfly/pi-workflow-engine",
-    "npm:pi-btw"
+    "npm:pi-btw",
+    "git:github.com/DietrichGebert/ponytail"
   ],
   "compaction": {
     "enabled": true
