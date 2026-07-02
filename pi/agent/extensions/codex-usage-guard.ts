@@ -1,1 +1,0 @@
-/home/jbfly/git/codex-usage-guard/pi/extensions/codex-usage-guard.ts

@@ -1,1 +1,0 @@
-/home/jbfly/git/bwcli-key-management/.pi/extensions/vaultwarden.ts

@@ -1,8 +1,8 @@
 // es-find.ts — search the Exceptional Spirits catalogs in parallel for a vendor,
 // invoice reference, or phrase, and return consolidated hits. READ-ONLY.
 //
-//   /workflow es-find "The Lost Explorer INV-0368"
-//   /workflow es-find "Loch Lomond"
+//   /workflow es-find "Example Distillery INV-0123"
+//   /workflow es-find "Example Distillery"
 //
 // Tiered: the two searchers run on a cheaper model (FAST) since they mostly drive
 // sqlite; the consolidation runs on SMART. The catalogs are local sqlite (bash +

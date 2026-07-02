@@ -11,10 +11,10 @@ Built-in names win collisions, so custom workflows have their own names.
 - **`research`** — answer an open question by fanning out readers across angles, then synthesizing.
   `/workflow research "how does evidence_db.py build work end to end?"`
 - **`es-find`** — parallel read-only search across the ES mailbox + evidence catalogs.
-  `/workflow es-find "The Lost Explorer INV-0368"`
+  `/workflow es-find "Example Distillery INV-0123"`
 - **`es-verify`** — two independent skeptical verifiers check a claim about the books from
   read-only evidence, then a go/no-go. **Never writes to Odoo.**
-  `/workflow es-verify "INV-0284 is fully settled"`
+  `/workflow es-verify "INV-0123 is fully settled"`
 
 ## Models & tiering
 

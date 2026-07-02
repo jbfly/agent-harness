@@ -1,0 +1,4 @@
+
+# machine-local extension symlinks (absolute paths into private repos; dangling for anyone who clones)
+pi/agent/extensions/vaultwarden.ts
+pi/agent/extensions/codex-usage-guard.ts

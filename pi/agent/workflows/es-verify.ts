@@ -2,8 +2,8 @@
 // accuracy matters before a sensitive change. Two independent, skeptical verifiers
 // gather evidence read-only; a third synthesizes a go/no-go. NEVER writes to Odoo.
 //
-//   /workflow es-verify "INV-0284 from The Lost Explorer is fully settled"
-//   /workflow es-verify "Loch Lomond FT A2025/151 (EUR 8,410.38) is still unpaid"
+//   /workflow es-verify "INV-0123 from Example Distillery is fully settled"
+//   /workflow es-verify "Example Distillery FT A2025/042 (EUR 1,234.56) is still unpaid"
 //
 // Accuracy over cost: verifiers and synthesis run on SMART. All read-only.
 
